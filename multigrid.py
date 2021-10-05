@@ -36,19 +36,22 @@ with each observation.
 import math
 
 import gym
-import gym_minigrid.minigrid as minigrid
+import minigrid
+from gym_minigrid.rendering import *
+
 import gym_minigrid.rendering as rendering
 import numpy as np
 
 # Map of color names to RGB values
 AGENT_COLOURS = [
-    np.array([60, 182, 234]),  # Blue
-    np.array([229, 52, 52]),  # Red
-    np.array([144, 32, 249]),  # Purple
-    np.array([69, 196, 60]),  # Green
-    np.array([252, 227, 35]),  # Yellow
+    np.array([255, 0, 0]), # red
+    np.array([255, 165, 0]), # orange
+    np.array([0, 255, 0]), # green
+    np.array([0, 0, 255]), # blue
+    np.array([112, 39, 195]), # purple
+    np.array([255, 255, 0]), # yellow
+    np.array([100, 100, 100]) # grey
 ]
-
 
 class WorldObj(minigrid.WorldObj):
   """Override MiniGrid base class to deal with Agent objects."""
@@ -100,11 +103,12 @@ class WorldObj(minigrid.WorldObj):
       v = minigrid.Lava()
     elif obj_type == 'agent':
       v = Agent(color_idx, state)
+    elif obj_type == 'battery':
+      v = minigrid.Battery(color)
     else:
       assert False, "unknown object type in decode '%s'" % obj_type
 
     return v
-
 
 class Door(minigrid.Door):
   """Extends minigrid Door class to multiple agents possibly carrying keys."""
@@ -454,6 +458,8 @@ class MultiGridEnv(minigrid.MiniGridEnv):
 
     # Maintain a done variable for each agent
     self.done = [False] * self.n_agents
+    self.battery = [90] * self.n_agents
+    self.battery_empty = False
 
     # Initialize the RNG
     self.seed_value = seed
@@ -491,10 +497,10 @@ class MultiGridEnv(minigrid.MiniGridEnv):
 
     # Step count since episode start
     self.step_count = 0
+    self.battery = [90] * self.n_agents
 
     # Return first observation
     obs = self.gen_obs()
-
     return obs
 
   def __str__(self):
@@ -517,6 +523,7 @@ class MultiGridEnv(minigrid.MiniGridEnv):
         'box': 'B',
         'goal': 'G',
         'lava': 'V',
+        'battery': 'T'
     }
 
     # Map agent's direction to short string
@@ -861,6 +868,24 @@ class MultiGridEnv(minigrid.MiniGridEnv):
   def step_one_agent(self, action, agent_id):
     reward = 0
 
+    # Check if battery can be charged
+    agent_pos = self.agent_pos[agent_id]
+
+    if list(agent_pos) == [4,6]:
+      if self.battery[agent_id] < self.max_steps:
+        self.battery[agent_id] += 0.5*self.max_steps
+      self.battery_empty = True
+    else:
+        if self.battery_empty:
+          # Set Battery Location
+          battery = minigrid.Battery()
+          pos_battery = [4, 6]
+          self.grid.set(pos_battery[0], pos_battery[1], battery)
+
+          if battery is not None:
+            battery.init_pos = pos_battery
+            battery.cur_pos = pos_battery
+
     # Get the position in front of the agent
     fwd_pos = self.front_pos[agent_id]
 
@@ -885,11 +910,19 @@ class MultiGridEnv(minigrid.MiniGridEnv):
 
     # Pick up an object
     elif action == self.actions.pickup:
-      self._pickup(agent_id, fwd_pos)
+      fwd_cell = self.grid.get(*fwd_pos)
+      if fwd_cell and fwd_cell.can_pickup():
+        color_idx = self.colors.index(minigrid.COLOR_TO_IDX[fwd_cell.color])
+        if color_idx == 0:
+          self._pickup(agent_id, fwd_pos)
 
     # Drop an object
     elif action == self.actions.drop:
-      self._drop(agent_id, fwd_pos)
+      fwd_cell = self.grid.get(*fwd_pos)
+      if fwd_cell and fwd_cell.can_pickup():
+        color_idx = self.colors.index(minigrid.COLOR_TO_IDX[fwd_cell.color])
+        if color_idx == 0:
+          self._drop(agent_id, fwd_pos)
 
     # Toggle/activate an object
     elif action == self.actions.toggle:
@@ -993,6 +1026,12 @@ class MultiGridEnv(minigrid.MiniGridEnv):
     if self.step_count >= self.max_steps:
       collective_done = True
 
+    # Set Done to True if Battery Dies
+    for a in agent_ordering:
+      if self.battery[a] <= 0:
+        collective_done = True
+      else:
+        self.battery[a] -= 1
     return obs, rewards, collective_done, {}
 
   def gen_obs_grid(self, agent_id):
@@ -1144,7 +1183,9 @@ class MultiGridEnv(minigrid.MiniGridEnv):
       return None
 
     if mode == 'human' and not self.window:
-      self.window = minigrid.window.Window('gym_minigrid')
+      print()
+      import window
+      self.window = window.Window('gym_minigrid')
       self.window.show(block=False)
 
     if highlight:
