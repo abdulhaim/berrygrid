@@ -119,7 +119,7 @@ class PickEnv(multigrid.MultiGridEnv):
 
 class RandomColorGatherEnv8x8(PickEnv):
   def __init__(self, **kwargs):
-    super().__init__(color_pick="red", size=8, n_agents=1, n_goals=1, extra_goals=4, n_clutter=0, n_colors=5, **kwargs)
+    super().__init__(size=8, n_agents=1, n_goals=1, extra_goals=4, n_clutter=0, n_colors=5, **kwargs)
 
 if hasattr(__loader__, 'name'):
   module_path = __loader__.name
@@ -129,3 +129,4 @@ elif hasattr(__loader__, 'fullname'):
 register(
     env_id='MultiGrid-Color-Gather-Env-8x8-v0',
     entry_point=module_path + ':RandomColorGatherEnv8x8')
+

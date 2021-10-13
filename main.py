@@ -2,7 +2,7 @@
 import gym
 import envs.pick
 
-env = gym.make("MultiGrid-Color-Gather-Env-8x8-v0")
+env = gym.make("MultiGrid-Color-Gather-Env-8x8-v0", color_pick="green")
 # pre-training phase
 num_tasks = 5
 num_episodes = 500
@@ -16,6 +16,5 @@ for task_num in range(num_tasks):
         if done:
             obs = env.reset()
             done = False
-
 
 env.close()

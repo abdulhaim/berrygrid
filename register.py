@@ -32,4 +32,7 @@ def register(env_id, entry_point, reward_threshold=0.95):
 
   # Register the environment with OpenAI gym
   gym_register(
-      id=env_id, entry_point=entry_point, reward_threshold=reward_threshold)
+      id=env_id,
+      entry_point=entry_point,
+      reward_threshold=reward_threshold,
+      kwargs={'color_pick': "red"})
