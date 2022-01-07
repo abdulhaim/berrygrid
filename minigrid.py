@@ -147,6 +147,8 @@ class WorldObj:
             v = Lava()
         elif obj_type == 'battery':
             v = Battery()
+        elif obj_type == 'water':
+            v = Water()
         else:
             assert False, "unknown object type in decode '%s'" % obj_type
 
@@ -185,7 +187,29 @@ class Floor(WorldObj):
 
 class Lava(WorldObj):
     def __init__(self):
-        super().__init__('lava', 'red')
+        super().__init__('water', 'red')
+
+    def can_overlap(self):
+        return False
+
+    def render(self, img):
+        c = (255, 128, 0)
+
+        # Background color
+        fill_coords(img, point_in_rect(0, 1, 0, 1), c)
+
+        # Little waves
+        for i in range(3):
+            ylo = 0.3 + 0.2 * i
+            yhi = 0.4 + 0.2 * i
+            fill_coords(img, point_in_line(0.1, ylo, 0.3, yhi, r=0.03), (0,0,0))
+            fill_coords(img, point_in_line(0.3, yhi, 0.5, ylo, r=0.03), (0,0,0))
+            fill_coords(img, point_in_line(0.5, ylo, 0.7, yhi, r=0.03), (0,0,0))
+            fill_coords(img, point_in_line(0.7, yhi, 0.9, ylo, r=0.03), (0,0,0))
+
+class Water(WorldObj):
+    def __init__(self):
+        super().__init__('lava', 'blue')
 
     def can_overlap(self):
         return True
@@ -204,6 +228,7 @@ class Lava(WorldObj):
             fill_coords(img, point_in_line(0.3, yhi, 0.5, ylo, r=0.03), (0,0,0))
             fill_coords(img, point_in_line(0.5, ylo, 0.7, yhi, r=0.03), (0,0,0))
             fill_coords(img, point_in_line(0.7, yhi, 0.9, ylo, r=0.03), (0,0,0))
+
 
 class Wall(WorldObj):
     def __init__(self, color='grey'):
@@ -552,12 +577,10 @@ class Grid:
         """
         Produce a compact numpy encoding of the grid
         """
-
         if vis_mask is None:
             vis_mask = np.ones((self.width, self.height), dtype=bool)
 
         array = np.zeros((self.width, self.height, 3), dtype='uint8')
-
         for i in range(self.width):
             for j in range(self.height):
                 if vis_mask[i, j]:
@@ -788,6 +811,8 @@ class MiniGridEnv(gym.Env):
             'goal'          : 'G',
             'lava'          : 'V',
             'battery'       : 'T',
+            'water': 'C',
+
         }
 
         # Short string for opened door
@@ -1216,7 +1241,6 @@ class MiniGridEnv(gym.Env):
         """
         Generate the agent's view (partially observable, low-resolution encoding)
         """
-
         grid, vis_mask = self.gen_obs_grid()
 
         # Encode the partially observable view into a numpy array

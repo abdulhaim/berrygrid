@@ -2,17 +2,17 @@
 
 The agents must pick up (move on top of) items in the environment.
 """
-import minigrid
+import berrygrid.minigrid as minigrid
 import numpy as np
-import multigrid
-from register import register
+import berrygrid.multigrid as multigrid
+from berrygrid.register import register
 
 
 class PickEnv(multigrid.MultiGridEnv):
   """Object gathering environment."""
 
   def __init__(self,
-               color_pick="red",
+               color_pick,
                size=15,
                n_agents=2,
                n_goals=1,
@@ -40,8 +40,10 @@ class PickEnv(multigrid.MultiGridEnv):
     self.n_colors = n_colors
     self.random_colors = random_colors
     self.extra_goals = extra_goals
-    self.color_pick = color_pick
-    if n_colors >= len(minigrid.IDX_TO_COLOR):
+    self.color_pick = kwargs["kwargs"]["color_pick"]
+    self.battery_enabled = kwargs["kwargs"]["battery_enabled"]
+    self.size = size
+    if n_colors > len(minigrid.IDX_TO_COLOR):
       raise ValueError('Too many colors requested')
 
     self.collected_colors = [0] * n_colors
@@ -49,11 +51,12 @@ class PickEnv(multigrid.MultiGridEnv):
         grid_size=size,
         max_steps=max_steps,
         n_agents=n_agents,
-        fully_observed=True,
-        **kwargs)
+        fully_observed=True)
     self.metrics = {'max_gathered': 0, 'other_gathered': 0}
 
-  def reset(self):
+  def reset(self, color="red"):
+    self.color_pick = color
+    self.battery_enabled = self.battery_enabled
     self.collected_colors = [0] * self.n_colors
     return super(PickEnv, self).reset()
 
@@ -63,63 +66,68 @@ class PickEnv(multigrid.MultiGridEnv):
     self.objects = []
     self.colors = list(range(len(minigrid.IDX_TO_COLOR)))
 
-    # Set Battery Location
-    battery = minigrid.Battery()
-    pos_battery = [4,6]
-    self.grid.set(pos_battery[0], pos_battery[1], battery)
+    if self.battery_enabled:
+      # Set Battery Location
+      battery = minigrid.Battery()
+      pos_battery = [4, self.size-2]
+      self.grid.set(pos_battery[0], pos_battery[1], battery)
 
-    if battery is not None:
-      battery.init_pos = pos_battery
-      battery.cur_pos = pos_battery
+      if battery is not None:
+        battery.init_pos = pos_battery
+        battery.cur_pos = pos_battery
 
     # Set Single Goal Location for Agent
-    for i in range(self.n_goals):
+    for i in range(3):
       if self.random_colors:
-        color = minigrid.IDX_TO_COLOR[np.random.choice(self.colors)]
+        color_pick = minigrid.IDX_TO_COLOR[np.random.choice(self.colors)]
       else:
-        # color = minigrid.IDX_TO_COLOR[self.colors[i % self.n_colors]]
-        color = self.color_pick
-      self.objects.append(minigrid.Ball(color=color))
-      self.place_obj(self.objects[i], max_tries=100)
+        color_pick = self.color_pick
+      self.objects.append(minigrid.Ball(color=color_pick))
+      self.place_obj(self.objects[-1], max_tries=100)
+
     for _ in range(self.n_clutter):
       self.place_obj(minigrid.Wall(), max_tries=100)
 
     # Set Dummy Goal Locations
     remaining_colors = [i for i in self.colors if i!=minigrid.COLOR_TO_IDX[self.color_pick]]
-    for i in range(1, self.extra_goals):
-      if self.random_colors:
-        color = minigrid.IDX_TO_COLOR[np.random.choice(self.colors)]
-      else:
-        color = minigrid.IDX_TO_COLOR[remaining_colors[i % self.n_colors-2]]
-      self.objects.append(minigrid.Ball(color=color))
-      self.place_obj(self.objects[i], max_tries=100)
+    remaining_colors = remaining_colors[:self.n_colors-1]
+
+    for j in remaining_colors:
+      for i in range(3):
+        if self.random_colors:
+          color = minigrid.IDX_TO_COLOR[np.random.choice(remaining_colors)]
+        else:
+          color = minigrid.IDX_TO_COLOR[j]
+        self.objects.append(minigrid.Ball(color=color))
+        self.place_obj(self.objects[-1], max_tries=100)
 
     self.place_agent()
-
     self.mission = 'pick up objects'
 
   def step(self, action):
-    obs, _, done, info = multigrid.MultiGridEnv.step(self, action)
+    obs, _, done, info = multigrid.MultiGridEnv.step(self, action, self.battery_enabled)
     reward = [0] * self.n_agents
     for i, obj in enumerate(self.carrying):
       if obj:
         color_idx = self.colors.index(minigrid.COLOR_TO_IDX[obj.color])
-
-        # self.collected_colors[color_idx] += 1
-        # if max(self.collected_colors) == self.collected_colors[color_idx]:
-        if color_idx == i:
+        self.collected_colors[color_idx] += 1
+        if obj.color == self.color_pick:
           reward[i] += 1
           self.metrics['max_gathered'] += 1
           self.place_obj(obj, max_tries=100)
         else:
+          reward[i] += 0
           self.metrics['other_gathered'] += 1
+          self.place_obj(obj, max_tries=100)
+
         self.carrying[i] = None
     return obs, reward, done, info
 
 
 class RandomColorGatherEnv8x8(PickEnv):
   def __init__(self, **kwargs):
-    super().__init__(size=8, n_agents=1, n_goals=1, extra_goals=4, n_clutter=0, n_colors=5, **kwargs)
+    super().__init__(size=8
+                     , n_agents=1, n_goals=1, extra_goals=2, n_clutter=0, n_colors=3, **kwargs)
 
 if hasattr(__loader__, 'name'):
   module_path = __loader__.name

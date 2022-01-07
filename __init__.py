@@ -1,2 +1,2 @@
 import gym_minigrid.wrappers
-import envs
+import berrygrid.envs

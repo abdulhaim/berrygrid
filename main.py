@@ -13,6 +13,7 @@ for task_num in range(num_tasks):
         action = env.action_space.sample()
         env.render(mode='human')
         next_obs, reward, done, info = env.step(action)
+        print("current reward", reward)
         if done:
             obs = env.reset()
             done = False
